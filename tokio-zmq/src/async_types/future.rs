@@ -28,7 +28,7 @@ use zmq;
 
 use crate::{
     async_types::{
-        future_types::{RequestFuture, ResponseFuture},
+        future_types::{request, response},
         EventedFile,
     },
     error::Error,
@@ -98,17 +98,15 @@ where
     type Error = Error;
 
     fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
-        if let Some((sock, file)) = self.socks.take() {
-            match RequestFuture.poll(&sock, &file, &mut self.multipart)? {
-                Async::Ready(()) => Ok(Async::Ready(Socket::from_sock_and_file(sock, file).into())),
-                Async::NotReady => {
-                    self.socks = Some((sock, file));
+        let (sock, file) = self.socks.take().ok_or(Error::Reused)?;
 
-                    Ok(Async::NotReady)
-                }
+        match request::poll(&sock, &file, &mut self.multipart)? {
+            Async::Ready(()) => Ok(Async::Ready(Socket::from_sock_and_file(sock, file).into())),
+            Async::NotReady => {
+                self.socks = Some((sock, file));
+
+                Ok(Async::NotReady)
             }
-        } else {
-            Err(Error::Reused)
         }
     }
 }
@@ -192,20 +190,18 @@ where
     type Error = Error;
 
     fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
-        if let Some((sock, file)) = self.socks.take() {
-            match ResponseFuture.poll(&sock, &file, &mut self.multipart)? {
-                Async::Ready(multipart) => Ok(Async::Ready((
-                    multipart,
-                    Socket::from_sock_and_file(sock, file).into(),
-                ))),
-                Async::NotReady => {
-                    self.socks = Some((sock, file));
+        let (sock, file) = self.socks.take().ok_or(Error::Reused)?;
 
-                    Ok(Async::NotReady)
-                }
+        match response::poll(&sock, &file, &mut self.multipart)? {
+            Async::Ready(multipart) => Ok(Async::Ready((
+                multipart,
+                Socket::from_sock_and_file(sock, file).into(),
+            ))),
+            Async::NotReady => {
+                self.socks = Some((sock, file));
+
+                Ok(Async::NotReady)
             }
-        } else {
-            Err(Error::Reused)
         }
     }
 }

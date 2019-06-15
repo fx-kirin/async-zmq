@@ -400,8 +400,7 @@ fn main() {
             // Signal end when all clients have joined
             tokio::run(
                 control_fut
-                    .and_then(|control| control.send(zmq::Message::new()
-                        .into()))
+                    .and_then(|control| control.send(zmq::Message::new().into()))
                     .map(|_| ())
                     .or_else(|e| {
                         println!("Error in main loop {}, {:?}", e, e);

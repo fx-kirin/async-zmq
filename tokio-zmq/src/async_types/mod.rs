@@ -42,11 +42,3 @@ pub use self::{
 };
 
 pub type EventedFile = PollEvented<ZmqFile>;
-
-/// This type is used to determine what flags should be used when sending messages. If a message is
-/// the last in it's `Multipart`, it should not have the SNDMORE flag set.
-#[derive(PartialEq)]
-pub enum MsgPlace {
-    Nth,
-    Last,
-}

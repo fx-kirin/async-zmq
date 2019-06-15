@@ -23,12 +23,12 @@
 use std::collections::VecDeque;
 
 use async_zmq_types::Multipart;
-use futures::{Async, AsyncSink};
-use log::error;
+use futures::{Async, AsyncSink, Poll};
+use log::{debug, error};
 use zmq;
 
 use crate::{
-    async_types::{future_types::RequestFuture, EventedFile},
+    async_types::{future_types::request, EventedFile},
     error::Error,
 };
 
@@ -53,59 +53,38 @@ impl SinkType {
         }
     }
 
-    fn poll_request(
-        &mut self,
-        sock: &zmq::Socket,
-        file: &EventedFile,
-    ) -> Result<Async<()>, Error> {
-        if let Some(mut multipart) = self.pending.pop_front() {
-            match RequestFuture.poll(sock, file, &mut multipart)? {
-                Async::Ready(()) => self.poll_request(sock, file),
-                Async::NotReady => {
-                    self.pending.push_front(multipart);
-                    Ok(Async::NotReady)
-                }
-            }
-        } else {
-            Ok(Async::Ready(()))
-        }
-    }
-
     pub(crate) fn start_send(
         &mut self,
         multipart: Multipart,
         sock: &zmq::Socket,
         file: &EventedFile,
     ) -> Result<AsyncSink<Multipart>, Error> {
-        if self.pending.len() > 0 {
-            if self.pending.len() > self.buffer_size {
-                if let Async::NotReady = self.poll_complete(sock, file)? {
-                    if self.pending.len() > self.buffer_size {
-                        return Ok(AsyncSink::NotReady(multipart));
-                    } else {
-                        return self.start_send(multipart, sock, file);
-                    }
-                } else {
-                    return self.start_send(multipart, sock, file);
-                }
-            }
-            self.pending.push_back(multipart);
-            Ok(AsyncSink::Ready)
-        } else {
-            self.pending.push_back(multipart);
-            Ok(AsyncSink::Ready)
+        self.poll_complete(sock, file)?;
+
+        if self.pending.len() > 0 && self.pending.len() > self.buffer_size {
+            debug!("Sink is not ready!");
+            return Ok(AsyncSink::NotReady(multipart));
         }
+
+        self.pending.push_back(multipart);
+        Ok(AsyncSink::Ready)
     }
 
     pub(crate) fn poll_complete(
         &mut self,
         sock: &zmq::Socket,
         file: &EventedFile,
-    ) -> Result<Async<()>, Error> {
-        if self.pending.len() > 0 {
-            self.poll_request(sock, file)
-        } else {
-            Ok(Async::Ready(()))
+    ) -> Poll<(), Error> {
+        while let Some(mut multipart) = self.pending.pop_front() {
+            match request::poll(sock, file, &mut multipart)? {
+                Async::Ready(()) => continue,
+                Async::NotReady => {
+                    self.pending.push_front(multipart);
+                    return Ok(Async::NotReady);
+                }
+            }
         }
+
+        Ok(Async::Ready(()))
     }
 }

@@ -70,7 +70,7 @@ pub fn socket_derive(input: TokenStream) -> TokenStream {
             impl async_zmq_types::Sub for #name {}
         }
     } else {
-        quote!{}
+        quote! {}
     };
 
     let kind = Ident::new(&format!("{}", name).to_uppercase(), name.span());
@@ -90,19 +90,19 @@ pub fn socket_derive(input: TokenStream) -> TokenStream {
     };
 
     let stream = if has_attr(&input.attrs, "stream") {
-        quote!{
+        quote! {
             impl crate::prelude::StreamSocket for #name {}
         }
     } else {
-        quote!{}
+        quote! {}
     };
 
     let sink = if has_attr(&input.attrs, "sink") {
-        quote!{
+        quote! {
             impl crate::prelude::SinkSocket for #name {}
         }
     } else {
-        quote!{}
+        quote! {}
     };
 
     let full = quote! {

@@ -18,12 +18,12 @@
  */
 
 use async_zmq_types::Multipart;
-use futures::Async;
+use futures::{try_ready, Async, Poll};
 use log::error;
 use zmq;
 
 use crate::{
-    async_types::{future_types::ResponseFuture, EventedFile},
+    async_types::{future_types::response, EventedFile},
     error::Error,
 };
 
@@ -42,22 +42,20 @@ impl StreamType {
         &mut self,
         sock: &zmq::Socket,
         file: &EventedFile,
-    ) -> Result<Async<Option<Multipart>>, Error> {
-        match ResponseFuture.poll(&sock, &file, &mut self.multipart)? {
-            Async::Ready(item) => {
-                Ok(Async::Ready(Some(item)))
-            }
-            Async::NotReady => {
-                Ok(Async::NotReady)
-            }
-        }
+    ) -> Poll<Option<Multipart>, Error> {
+        let mpart = try_ready!(response::poll(&sock, &file, &mut self.multipart));
+
+        Ok(Async::Ready(Some(mpart)))
     }
 }
 
 impl Drop for StreamType {
     fn drop(&mut self) {
         if self.multipart.len() > 0 {
-            error!("DROPPING RECEIVED NON-EMPTY MULTIPART, {}", self.multipart.len());
+            error!(
+                "DROPPING RECEIVED NON-EMPTY MULTIPART, {}",
+                self.multipart.len()
+            );
         }
     }
 }

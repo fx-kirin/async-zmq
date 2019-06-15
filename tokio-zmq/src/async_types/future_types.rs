@@ -20,62 +20,34 @@
 //! This module contains definitions for `RequestFuture` and `ResponseFuture`, the two types that
 //! implement `futures::Future`.
 
-use std::mem;
-
-use async_zmq_types::Multipart;
-use futures::{task::current, Async};
-use log::debug;
-use mio::Ready;
-use zmq::{self, Message, DONTWAIT, POLLIN, POLLOUT, SNDMORE};
-
-use crate::{
-    async_types::{EventedFile, MsgPlace},
-    error::Error,
-};
-
 /*-------------------------------RequestFuture--------------------------------*/
 
-pub(crate) struct RequestFuture;
+pub(crate) mod request {
+    use async_zmq_types::Multipart;
+    use futures::{try_ready, Async, Poll};
+    use log::{debug, error};
+    use zmq::{self, Message, DONTWAIT, SNDMORE};
 
-impl RequestFuture {
-    fn send(
-        &mut self,
-        sock: &zmq::Socket,
-        multipart: &mut Multipart,
-    ) -> Result<Async<()>, Error> {
+    use crate::{async_types::EventedFile, error::Error};
+
+    fn send(sock: &zmq::Socket, multipart: &mut Multipart) -> Poll<(), Error> {
         while let Some(msg) = multipart.pop_front() {
-            let place = if multipart.is_empty() {
-                MsgPlace::Last
-            } else {
-                MsgPlace::Nth
-            };
-
-            debug!("RequestFuture: sending: {:?}", msg.as_str());
-            match self.send_msg(sock, msg, &place)? {
-                None => {
-                    if multipart.is_empty() {
-                        break;
-                    }
-                }
+            match send_msg(sock, msg, multipart.is_empty())? {
                 Some(msg) => {
                     multipart.push_front(msg);
                     return Ok(Async::NotReady);
                 }
+                None => continue,
             }
         }
 
         Ok(Async::Ready(()))
     }
 
-    fn send_msg(
-        &mut self,
-        sock: &zmq::Socket,
-        msg: Message,
-        place: &MsgPlace,
-    ) -> Result<Option<Message>, Error> {
-        let flags = DONTWAIT | if *place == MsgPlace::Last { 0 } else { SNDMORE };
+    fn send_msg(sock: &zmq::Socket, msg: Message, last: bool) -> Result<Option<Message>, Error> {
+        let flags = DONTWAIT | if last { 0 } else { SNDMORE };
 
-        let msg_clone = Message::from_slice(&msg);
+        let msg_clone = Message::from(&*msg);
 
         match sock.send(msg, flags) {
             Ok(_) => Ok(None),
@@ -84,120 +56,116 @@ impl RequestFuture {
                 debug!("RequestFuture: EAGAIN");
                 Ok(Some(msg_clone))
             }
-            Err(e) => Err(e.into()),
+            Err(e) => {
+                error!("Send error: {}", e);
+                Err(e.into())
+            }
         }
     }
 
-    fn check_write(&mut self, sock: &zmq::Socket, file: &EventedFile) -> Result<bool, Error> {
-        if let Async::NotReady = file.poll_write_ready()? {
-            // Get the events currently waiting on the socket
-            let events = sock.get_events()?;
-            if (events & POLLOUT) != POLLOUT {
-                return Ok(false);
-            }
+    fn poll_write_ready(sock: &zmq::Socket, file: &EventedFile) -> Poll<(), Error> {
+        let events = sock.get_events()?;
+
+        if events & zmq::POLLOUT == zmq::POLLOUT {
+            return Ok(Async::Ready(()));
         }
 
-        current().notify();
         file.clear_write_ready()?;
-        Ok(true)
+        Ok(Async::NotReady)
     }
 
     pub(crate) fn poll(
-        &mut self,
         sock: &zmq::Socket,
         file: &EventedFile,
         multipart: &mut Multipart,
-    ) -> Result<Async<()>, Error> {
-        if let Async::Ready(_) = file.poll_read_ready(Ready::readable())? {
-            current().notify();
-            file.clear_read_ready(Ready::readable())?;
-        }
+    ) -> Poll<(), Error> {
+        let _ = file.poll_write_ready()?;
+        try_ready!(poll_write_ready(sock, file));
 
-        if self.check_write(sock, file)? {
-            self.send(sock, multipart)
-        } else {
-            Ok(Async::NotReady)
+        match send(sock, multipart)? {
+            Async::Ready(()) => {
+                Ok(Async::Ready(()))
+            }
+            Async::NotReady => {
+                file.clear_write_ready()?;
+                Ok(Async::NotReady)
+            }
         }
     }
 }
 
 /*-------------------------------ResponseFuture-------------------------------*/
 
-pub(crate) struct ResponseFuture;
+pub(crate) mod response {
+    use std::mem;
 
-impl ResponseFuture {
-    fn recv(
-        &mut self,
-        sock: &zmq::Socket,
-        multipart: &mut Multipart,
-    ) -> Result<Async<Multipart>, Error> {
-        let mut first = true;
+    use async_zmq_types::Multipart;
+    use futures::{try_ready, Async, Poll};
+    use log::{debug, error};
+    use mio::Ready;
+    use zmq::{self, Message, DONTWAIT};
 
+    use crate::{async_types::EventedFile, error::Error};
+
+    fn recv(sock: &zmq::Socket, multipart: &mut Multipart) -> Poll<Multipart, Error> {
         loop {
-            match self.recv_msg(sock)? {
-                Async::Ready(msg) => {
-                    first = false;
-                    let more = msg.get_more();
+            let msg = try_ready!(recv_msg(sock));
+            let more = msg.get_more();
 
-                    multipart.push_back(msg);
+            multipart.push_back(msg);
 
-                    if !more {
-                        return Ok(Async::Ready(mem::replace(multipart, Multipart::new())));
-                    }
-                }
-                Async::NotReady => {
-                    if first {
-                        return Ok(Async::NotReady);
-                    }
-                }
+            if !more {
+                return Ok(Async::Ready(mem::replace(multipart, Multipart::new())));
             }
         }
     }
 
-    fn recv_msg(&mut self, sock: &zmq::Socket) -> Result<Async<Message>, Error> {
+    fn recv_msg(sock: &zmq::Socket) -> Poll<Message, Error> {
         let mut msg = Message::new();
 
         match sock.recv(&mut msg, DONTWAIT) {
-            Ok(_) => {
-                debug!("ResponseFuture: received: {:?}", msg.as_str());
-                Ok(Async::Ready(msg))
-            }
+            Ok(_) => Ok(Async::Ready(msg)),
             Err(zmq::Error::EAGAIN) => {
                 debug!("ResponseFuture: EAGAIN");
                 Ok(Async::NotReady)
             }
-            Err(e) => Err(e.into()),
+            Err(e) => {
+                error!("Recv error: {}", e);
+                Err(e.into())
+            }
         }
     }
 
-    fn check_read(&mut self, sock: &zmq::Socket, file: &EventedFile) -> Result<bool, Error> {
-        if let Async::NotReady = file.poll_read_ready(Ready::readable())? {
-            let events = sock.get_events()?;
-            if (events & POLLIN) != POLLIN {
-                return Ok(false);
-            }
+    fn poll_read_ready(sock: &zmq::Socket, file: &EventedFile) -> Poll<(), Error> {
+        let events = sock.get_events()?;
+
+        if events & zmq::POLLIN == zmq::POLLIN {
+            return Ok(Async::Ready(()));
         }
 
-        current().notify();
         file.clear_read_ready(Ready::readable())?;
-        Ok(true)
+        Ok(Async::NotReady)
     }
 
     pub(crate) fn poll(
-        &mut self,
         sock: &zmq::Socket,
         file: &EventedFile,
         multipart: &mut Multipart,
-    ) -> Result<Async<Multipart>, Error> {
-        if let Async::Ready(_) = file.poll_write_ready()? {
-            current().notify();
-            file.clear_write_ready()?;
-        }
+    ) -> Poll<Multipart, Error> {
+        let ready = Ready::readable();
 
-        if self.check_read(sock, file)? {
-            self.recv(sock, multipart)
-        } else {
-            Ok(Async::NotReady)
+        let _ = file.poll_read_ready(ready)?;
+        try_ready!(poll_read_ready(sock, file));
+
+        match recv(sock, multipart)? {
+            Async::Ready(multipart) => {
+                futures::task::current().notify();
+                Ok(Async::Ready(multipart))
+            }
+            Async::NotReady => {
+                file.clear_read_ready(ready)?;
+                Ok(Async::NotReady)
+            }
         }
     }
 }
