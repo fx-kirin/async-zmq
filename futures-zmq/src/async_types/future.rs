@@ -21,16 +21,12 @@ use std::{fmt, marker::PhantomData, mem};
 
 use async_zmq_types::Multipart;
 use futures::{Async, Future};
-use log::{error, trace};
+use log::error;
 
-use crate::{
-    error::Error,
-    polling::{LocalSession, SockId},
-    socket::Socket,
-    RecvFuture, SendFuture,
-};
+use crate::{error::Error, socket::Socket, RecvFuture, SendFuture};
 
 pub(crate) enum SendState {
+    Ready,
     Pending(Multipart),
     Running(SendFuture),
     Polling,
@@ -42,36 +38,29 @@ impl SendState {
     }
 
     fn poll_fut(&mut self, mut fut: SendFuture) -> Result<Async<()>, Error> {
-        if let Async::Ready(opt) = fut.poll()? {
-            match opt {
-                None => Ok(Async::Ready(())),
-                Some(multipart) => {
-                    *self = SendState::Pending(multipart);
-
-                    Ok(Async::NotReady)
-                }
+        match fut.poll()? {
+            Async::Ready(Some(multipart)) => {
+                *self = SendState::Pending(multipart);
+                Ok(Async::NotReady)
             }
-        } else {
-            *self = SendState::Running(fut);
-
-            Ok(Async::NotReady)
+            Async::Ready(None) => {
+                *self = SendState::Ready;
+                Ok(Async::Ready(()))
+            }
+            Async::NotReady => {
+                *self = SendState::Running(fut);
+                Ok(Async::NotReady)
+            }
         }
     }
 
-    pub(crate) fn poll_flush(
-        &mut self,
-        session: &LocalSession,
-        sock: &SockId,
-    ) -> Result<Async<()>, Error> {
+    pub(crate) fn poll_flush(&mut self, sock: &Socket) -> Result<Async<()>, Error> {
         match self.polling() {
-            SendState::Pending(multipart) => {
-                for msg in multipart.iter() {
-                    if let Some(msg) = msg.as_str() {
-                        trace!("Sending {} to {}", msg, sock);
-                    }
-                }
-                self.poll_fut(session.send(sock, multipart))
+            SendState::Ready => {
+                *self = SendState::Ready;
+                Ok(Async::Ready(()))
             }
+            SendState::Pending(multipart) => self.poll_fut(sock.send_msg(multipart)),
             SendState::Running(fut) => self.poll_fut(fut),
             SendState::Polling => {
                 error!("Called polling while polling");
@@ -86,8 +75,7 @@ where
     T: From<Socket>,
 {
     state: SendState,
-    session: Option<LocalSession>,
-    sock: Option<SockId>,
+    sock: Option<Socket>,
     phantom: PhantomData<T>,
 }
 
@@ -95,10 +83,9 @@ impl<T> MultipartRequest<T>
 where
     T: From<Socket>,
 {
-    pub fn new(session: LocalSession, sock: SockId, multipart: Multipart) -> Self {
+    pub fn new(sock: Socket, multipart: Multipart) -> Self {
         MultipartRequest {
             state: SendState::Pending(multipart),
-            session: Some(session),
             sock: Some(sock),
             phantom: PhantomData,
         }
@@ -114,17 +101,11 @@ where
 
     fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
         let sock = self.sock.take().unwrap();
-        let session = self.session.take().unwrap();
 
-        match self.state.poll_flush(&session, &sock)? {
-            Async::Ready(_) => {
-                let socket = Socket::from_sock_and_session(sock, session);
-
-                Ok(Async::Ready(T::from(socket)))
-            }
+        match self.state.poll_flush(&sock)? {
+            Async::Ready(_) => Ok(Async::Ready(T::from(sock))),
             Async::NotReady => {
                 self.sock = Some(sock);
-                self.session = Some(session);
 
                 Ok(Async::NotReady)
             }
@@ -163,21 +144,18 @@ impl RecvState {
 
     fn poll_fut(&mut self, mut fut: RecvFuture) -> Result<Async<Multipart>, Error> {
         if let ready @ Async::Ready(_) = fut.poll()? {
-            Ok(ready)
-        } else {
-            *self = RecvState::Running(fut);
-
-            Ok(Async::NotReady)
+            *self = RecvState::Pending;
+            return Ok(ready);
         }
+
+        *self = RecvState::Running(fut);
+
+        Ok(Async::NotReady)
     }
 
-    pub(crate) fn poll_fetch(
-        &mut self,
-        session: &LocalSession,
-        sock: &SockId,
-    ) -> Result<Async<Multipart>, Error> {
+    pub(crate) fn poll_fetch(&mut self, sock: &Socket) -> Result<Async<Multipart>, Error> {
         match self.polling() {
-            RecvState::Pending => self.poll_fut(session.recv(sock)),
+            RecvState::Pending => self.poll_fut(sock.recv_msg()),
             RecvState::Running(fut) => self.poll_fut(fut),
             RecvState::Polling => {
                 error!("Called polling while polling");
@@ -192,8 +170,7 @@ where
     T: From<Socket>,
 {
     state: RecvState,
-    sock: Option<SockId>,
-    session: Option<LocalSession>,
+    sock: Option<Socket>,
     phantom: PhantomData<T>,
 }
 
@@ -201,11 +178,10 @@ impl<T> MultipartResponse<T>
 where
     T: From<Socket>,
 {
-    pub fn new(session: LocalSession, sock: SockId) -> Self {
+    pub fn new(sock: Socket) -> Self {
         MultipartResponse {
             state: RecvState::Pending,
             sock: Some(sock),
-            session: Some(session),
             phantom: PhantomData,
         }
     }
@@ -220,22 +196,11 @@ where
 
     fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
         let sock = self.sock.take().unwrap();
-        let session = self.session.take().unwrap();
 
-        match self.state.poll_fetch(&session, &sock)? {
-            Async::Ready(multipart) => {
-                for msg in multipart.iter() {
-                    if let Some(msg) = msg.as_str() {
-                        trace!("Received {} from {}", msg, sock);
-                    }
-                }
-                let socket = Socket::from_sock_and_session(sock, session);
-
-                Ok(Async::Ready((multipart, T::from(socket))))
-            }
+        match self.state.poll_fetch(&sock)? {
+            Async::Ready(multipart) => Ok(Async::Ready((multipart, T::from(sock)))),
             Async::NotReady => {
                 self.sock = Some(sock);
-                self.session = Some(session);
 
                 Ok(Async::NotReady)
             }

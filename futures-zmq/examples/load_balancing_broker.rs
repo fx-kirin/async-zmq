@@ -148,7 +148,7 @@ fn client_task(client_num: usize) -> usize {
         .connect("tcp://localhost:5672")
         .build();
 
-    let msg = zmq::Message::from_slice(b"HELLO");
+    let msg = zmq::Message::from("HELLO");
     let fut = client_fut.and_then(move |client| {
         client
             .send(msg.into())
@@ -183,7 +183,7 @@ fn worker_task(worker_num: usize) -> usize {
         .connect("tcp://localhost:5673")
         .build();
 
-    let msg = zmq::Message::from_slice(b"READY");
+    let msg = zmq::Message::from("READY");
 
     let fut = worker_fut
         .join(control_fut)
@@ -208,7 +208,7 @@ fn worker_task(worker_num: usize) -> usize {
                                 envelope.addr().as_str().unwrap()
                             );
 
-                            let msg = zmq::Message::from_slice(b"OK");
+                            let msg = zmq::Message::from("OK");
                             envelope.set_request(msg);
 
                             Ok(envelope.into())

@@ -20,67 +20,22 @@
 use std::{collections::VecDeque, fmt, marker::PhantomData};
 
 use async_zmq_types::{IntoSocket, Multipart};
-use futures::{Async, AsyncSink, Sink, Stream};
-use log::trace;
+use futures::{try_ready, Async, AsyncSink, Sink, Stream};
 
 use crate::{
-    async_types::{SinkState, StreamState},
+    async_types::{RecvState, SendState},
     error::Error,
-    polling::{LocalSession, SockId},
     socket::Socket,
 };
-
-struct SinkStreamState {
-    streaming: StreamState,
-    sinking: SinkState,
-}
-
-impl SinkStreamState {
-    fn new() -> Self {
-        SinkStreamState {
-            streaming: StreamState::Pending,
-            sinking: SinkState::Pending,
-        }
-    }
-
-    fn poll_flush(
-        &mut self,
-        session: &LocalSession,
-        sock: &SockId,
-        multiparts: &mut VecDeque<Multipart>,
-    ) -> Result<Async<()>, Error> {
-        self.sinking.poll_flush(session, sock, multiparts)
-    }
-
-    fn poll_fetch(
-        &mut self,
-        session: &LocalSession,
-        sock: &SockId,
-    ) -> Result<Async<Option<Multipart>>, Error> {
-        self.streaming.poll_fetch(session, sock)
-    }
-
-    fn start_send(
-        &mut self,
-        session: &LocalSession,
-        sock: &SockId,
-        multiparts: &mut VecDeque<Multipart>,
-        buffer_size: usize,
-        multipart: Multipart,
-    ) -> Result<AsyncSink<Multipart>, Error> {
-        self.sinking
-            .start_send(session, sock, multiparts, buffer_size, multipart)
-    }
-}
 
 pub struct MultipartSinkStream<T>
 where
     T: From<Socket>,
 {
-    state: SinkStreamState,
-    session: LocalSession,
-    sock: SockId,
+    send: SendState,
+    recv: RecvState,
     multiparts: VecDeque<Multipart>,
+    sock: Socket,
     buffer_size: usize,
     phantom: PhantomData<T>,
 }
@@ -89,12 +44,12 @@ impl<T> MultipartSinkStream<T>
 where
     T: From<Socket>,
 {
-    pub fn new(session: LocalSession, sock: SockId, buffer_size: usize) -> Self {
+    pub fn new(sock: Socket, buffer_size: usize) -> Self {
         MultipartSinkStream {
-            state: SinkStreamState::new(),
-            session,
-            sock,
+            send: SendState::Ready,
+            recv: RecvState::Pending,
             multiparts: VecDeque::new(),
+            sock,
             buffer_size,
             phantom: PhantomData,
         }
@@ -106,7 +61,7 @@ where
     T: From<Socket>,
 {
     fn into_socket(self) -> T {
-        T::from(Socket::from_sock_and_session(self.sock, self.session))
+        T::from(self.sock)
     }
 }
 
@@ -121,18 +76,25 @@ where
         &mut self,
         multipart: Self::SinkItem,
     ) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
-        self.state.start_send(
-            &self.session,
-            &self.sock,
-            &mut self.multiparts,
-            self.buffer_size,
-            multipart,
-        )
+        self.poll_complete()?;
+
+        if self.multiparts.len() >= self.buffer_size {
+            return Ok(AsyncSink::NotReady(multipart));
+        }
+
+        self.multiparts.push_back(multipart);
+        Ok(AsyncSink::Ready)
     }
 
     fn poll_complete(&mut self) -> Result<Async<()>, Self::SinkError> {
-        self.state
-            .poll_flush(&self.session, &self.sock, &mut self.multiparts)
+        try_ready!(self.send.poll_flush(&self.sock));
+
+        while let Some(multipart) = self.multiparts.pop_front() {
+            self.send = SendState::Pending(multipart);
+            try_ready!(self.send.poll_flush(&self.sock));
+        }
+
+        Ok(Async::Ready(()))
     }
 }
 
@@ -144,17 +106,9 @@ where
     type Error = Error;
 
     fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
-        match self.state.poll_fetch(&self.session, &self.sock) {
-            Ok(Async::Ready(Some(multipart))) => {
-                for msg in multipart.iter() {
-                    if let Some(msg) = msg.as_str() {
-                        trace!("Received {} from {}", msg, &self.sock);
-                    }
-                }
-                Ok(Async::Ready(Some(multipart)))
-            }
-            other => other,
-        }
+        let mpart = try_ready!(self.recv.poll_fetch(&self.sock));
+
+        Ok(Async::Ready(Some(mpart)))
     }
 }
 

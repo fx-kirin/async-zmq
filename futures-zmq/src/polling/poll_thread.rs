@@ -29,8 +29,8 @@ use super::{
 };
 
 enum Action {
-    Snd(usize),
     Rcv(usize),
+    Snd(usize),
 }
 
 pub(crate) struct PollThread {
@@ -38,7 +38,6 @@ pub(crate) struct PollThread {
     tx: Sender,
     rx: Receiver,
     should_stop: bool,
-    to_action: Vec<Action>,
     notify: Arc<NotifyCanceled>,
     sockets: BTreeMap<usize, Pollable>,
     channel: Arc<Channel>,
@@ -53,7 +52,6 @@ impl PollThread {
             tx,
             rx,
             should_stop: false,
-            to_action: Vec::new(),
             notify: Arc::new(NotifyCanceled::new(channel.clone())),
             sockets: BTreeMap::new(),
             channel,
@@ -224,16 +222,13 @@ impl PollThread {
     }
 
     fn poll(&mut self) {
-        self.to_action.truncate(0);
-
         let (ids, mut poll_items): (Vec<_>, Vec<_>) = self
             .sockets
             .iter()
-            .map(|(id, pollable)| (id, pollable.as_poll_item()))
+            .map(|(id, p)| (id, p.as_poll_item()))
             .unzip();
 
         let io_item = PollItem::from_fd(self.channel.read_fd(), POLLIN);
-
         poll_items.push(io_item);
 
         let res = if self.channel.drain() {
@@ -250,40 +245,35 @@ impl PollThread {
             }
         };
 
-        for (id, item) in ids.into_iter().zip(poll_items) {
-            // Prioritize outbound messages over inbound messages
-            if self
-                .sockets
-                .get(&id)
-                .map(|p| p.is_writable(&item))
-                .unwrap_or(false)
-            {
-                trace!("{} write ready", id);
-                self.to_action.push(Action::Snd(id));
-            }
-
-            if self
-                .sockets
-                .get(&id)
-                .map(|p| p.is_readable(&item))
-                .unwrap_or(false)
-            {
-                trace!("{} read ready", id);
-                self.to_action.push(Action::Rcv(id));
-            }
-        }
-
-        for action in self.to_action.drain(..).rev() {
-            match action {
-                Action::Rcv(id) => {
-                    self.sockets
-                        .get_mut(&id)
-                        .map(|pollable| pollable.fetch_multiparts());
+        let actions: Vec<_> = ids
+            .into_iter()
+            .zip(poll_items)
+            .filter_map(|(id, item)| {
+                if item.is_writable() {
+                    Some(Action::Snd(id))
+                } else if item.is_readable() {
+                    Some(Action::Rcv(id))
+                } else {
+                    None
                 }
+            })
+            .collect();
+
+        for action in actions {
+            match action {
                 Action::Snd(id) => {
-                    self.sockets
-                        .get_mut(&id)
-                        .map(|pollable| pollable.flush_multiparts());
+                    self.sockets.get_mut(&id).map(|s| {
+                        if s.is_writable() {
+                            s.flush_multiparts()
+                        }
+                    });
+                }
+                Action::Rcv(id) => {
+                    self.sockets.get_mut(&id).map(|s| {
+                        if s.is_readable() {
+                            s.fetch_multiparts()
+                        }
+                    });
                 }
             }
         }

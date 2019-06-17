@@ -22,10 +22,13 @@
 pub mod config;
 pub mod types;
 
-use std::{fmt, sync::Arc};
 
 use async_zmq_types::{InnerSocket, IntoInnerSocket, Multipart, SocketBuilder};
+use futures::Async;
+use mio::Ready;
+use std::{fmt, sync::Arc};
 use tokio_reactor::PollEvented;
+
 use zmq;
 
 use crate::{
@@ -78,6 +81,49 @@ impl Socket {
 
         Ok(Socket { sock, file })
     }
+
+    pub(crate) fn send_msg(&self, msg: zmq::Message, flags: i32) -> zmq::Result<()> {
+        self.sock.send(msg, flags)
+    }
+
+    pub(crate) fn recv_msg(&self, msg: &mut zmq::Message) -> zmq::Result<()> {
+        self.sock.recv(msg, zmq::DONTWAIT)
+    }
+
+    pub(crate) fn poll_read_ready(&self, mask: Ready) -> Result<Async<Ready>, Error> {
+        self.poll_ready(mask, zmq::POLLIN)
+    }
+
+    pub(crate) fn poll_write_ready(&self) -> Result<Async<()>, Error> {
+        let _ = self.file.poll_write_ready()?;
+
+        let events = self.sock.get_events()?;
+
+        if events & zmq::POLLOUT == zmq::POLLOUT {
+            return Ok(Async::Ready(()));
+        }
+
+        self.file.clear_write_ready()?;
+        Ok(Async::NotReady)
+    }
+
+    #[inline]
+    fn poll_ready(&self, fd_mask: Ready, zmq_mask: zmq::PollEvents) -> Result<Async<Ready>, Error> {
+        let _ = self.file.poll_read_ready(fd_mask)?;
+
+        let events = self.sock.get_events()?;
+
+        if events & zmq_mask == zmq_mask {
+            return Ok(Async::Ready(fd_mask));
+        }
+
+        self.file.clear_read_ready(fd_mask)?;
+        Ok(Async::NotReady)
+    }
+
+    pub(crate) fn clear_ready(&self, mask: Ready) -> Result<(), std::io::Error> {
+        self.file.clear_read_ready(mask)
+    }
 }
 
 impl<T> InnerSocket<T> for Socket
@@ -93,23 +139,23 @@ where
     type SinkStream = MultipartSinkStream<T>;
 
     fn send(self, multipart: Multipart) -> Self::Request {
-        MultipartRequest::new(self.sock, self.file, multipart)
+        MultipartRequest::new(self, multipart)
     }
 
     fn recv(self) -> Self::Response {
-        MultipartResponse::new(self.sock, self.file)
+        MultipartResponse::new(self)
     }
 
     fn stream(self) -> Self::Stream {
-        MultipartStream::new(self.sock, self.file)
+        MultipartStream::new(self)
     }
 
     fn sink(self, buffer_size: usize) -> Self::Sink {
-        MultipartSink::new(buffer_size, self.sock, self.file)
+        MultipartSink::new(buffer_size, self)
     }
 
     fn sink_stream(self, buffer_size: usize) -> Self::SinkStream {
-        MultipartSinkStream::new(buffer_size, self.sock, self.file)
+        MultipartSinkStream::new(buffer_size, self)
     }
 }
 

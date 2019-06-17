@@ -32,6 +32,7 @@ use crate::{
         MultipartRequest, MultipartResponse, MultipartSink, MultipartSinkStream, MultipartStream,
     },
     polling::{LocalSession, SockId},
+    RecvFuture, SendFuture,
 };
 
 /// Defines the raw Socket type. This type should never be interacted with directly, except to
@@ -62,6 +63,14 @@ impl Socket {
     pub fn from_sock_and_session(sock: SockId, session: LocalSession) -> Self {
         Socket { sock, session }
     }
+
+    pub(crate) fn recv_msg(&self) -> RecvFuture {
+        self.session.recv(&self.sock)
+    }
+
+    pub(crate) fn send_msg(&self, multipart: Multipart) -> SendFuture {
+        self.session.send(&self.sock, multipart)
+    }
 }
 
 impl<T> InnerSocket<T> for Socket
@@ -77,23 +86,23 @@ where
     type SinkStream = MultipartSinkStream<T>;
 
     fn send(self, multipart: Multipart) -> Self::Request {
-        MultipartRequest::new(self.session, self.sock, multipart)
+        MultipartRequest::new(self, multipart)
     }
 
     fn recv(self) -> Self::Response {
-        MultipartResponse::new(self.session, self.sock)
+        MultipartResponse::new(self)
     }
 
     fn stream(self) -> Self::Stream {
-        MultipartStream::new(self.session, self.sock)
+        MultipartStream::new(self)
     }
 
     fn sink(self, buffer_size: usize) -> Self::Sink {
-        MultipartSink::new(self.session, self.sock, buffer_size)
+        MultipartSink::new(self, buffer_size)
     }
 
     fn sink_stream(self, buffer_size: usize) -> Self::SinkStream {
-        MultipartSinkStream::new(self.session, self.sock, buffer_size)
+        MultipartSinkStream::new(self, buffer_size)
     }
 }
 

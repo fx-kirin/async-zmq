@@ -65,12 +65,12 @@ impl Pollable {
         self.sock.as_poll_item(self.kind.as_events())
     }
 
-    pub(crate) fn is_readable(&self, poll_item: &PollItem) -> bool {
-        self.kind.is_read() && poll_item.is_readable()
+    pub(crate) fn is_readable(&self) -> bool {
+        self.kind.is_read()
     }
 
-    pub(crate) fn is_writable(&self, poll_item: &PollItem) -> bool {
-        self.kind.is_write() && poll_item.is_writable()
+    pub(crate) fn is_writable(&self) -> bool {
+        self.kind.is_write()
     }
 
     pub(crate) fn read(&mut self) {
@@ -129,12 +129,13 @@ impl Pollable {
 
     pub(crate) fn try_receive_multipart(&mut self) -> Result<Option<Multipart>, zmq::Error> {
         while let Some(msg) = self.try_recieve_message()? {
-            if msg.get_more() {
-                self.inbound_message_cache.push_back(msg);
+            let get_more = msg.get_more();
+            self.inbound_message_cache.push_back(msg);
+
+            if get_more {
                 continue;
             }
 
-            self.inbound_message_cache.push_back(msg);
             let multipart = replace(&mut self.inbound_message_cache, Multipart::new());
 
             return Ok(Some(multipart));
@@ -181,7 +182,7 @@ impl Pollable {
         message: Message,
         flags: i32,
     ) -> Result<Option<Message>, zmq::Error> {
-        let msg_clone = Message::from_slice(&message);
+        let msg_clone = Message::from(&*message);
 
         match self.sock.send(message, flags) {
             Ok(_) => {

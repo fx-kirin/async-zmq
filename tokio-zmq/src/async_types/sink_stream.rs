@@ -24,10 +24,9 @@ use std::{fmt, marker::PhantomData};
 
 use async_zmq_types::{IntoSocket, Multipart};
 use futures::{AsyncSink, Poll, Sink, Stream};
-use zmq;
 
 use crate::{
-    async_types::{sink_type::SinkType, stream_type::StreamType, EventedFile},
+    async_types::{sink_type::SinkType, stream_type::StreamType},
     error::Error,
     socket::Socket,
 };
@@ -67,8 +66,7 @@ pub struct MultipartSinkStream<T>
 where
     T: From<Socket>,
 {
-    sock: zmq::Socket,
-    file: EventedFile,
+    sock: Socket,
     sink: SinkType,
     stream: StreamType,
     phantom: PhantomData<T>,
@@ -78,10 +76,9 @@ impl<T> MultipartSinkStream<T>
 where
     T: From<Socket>,
 {
-    pub fn new(buffer_size: usize, sock: zmq::Socket, file: EventedFile) -> Self {
+    pub fn new(buffer_size: usize, sock: Socket) -> Self {
         MultipartSinkStream {
             sock: sock,
-            file: file,
             sink: SinkType::new(buffer_size),
             stream: StreamType::new(),
             phantom: PhantomData,
@@ -94,7 +91,7 @@ where
     T: From<Socket>,
 {
     fn into_socket(self) -> T {
-        T::from(Socket::from_sock_and_file(self.sock, self.file))
+        T::from(self.sock)
     }
 }
 
@@ -109,11 +106,11 @@ where
         &mut self,
         multipart: Self::SinkItem,
     ) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
-        self.sink.start_send(multipart, &self.sock, &self.file)
+        self.sink.start_send(multipart, &self.sock)
     }
 
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.sink.poll_complete(&self.sock, &self.file)
+        self.sink.poll_complete(&self.sock)
     }
 }
 
@@ -125,7 +122,7 @@ where
     type Error = Error;
 
     fn poll(&mut self) -> Poll<Option<Multipart>, Self::Error> {
-        self.stream.poll(&self.sock, &self.file)
+        self.stream.poll(&self.sock)
     }
 }
 

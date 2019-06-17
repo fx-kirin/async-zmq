@@ -26,12 +26,11 @@ use std::{
 use async_zmq_types::{IntoSocket, Multipart};
 use futures::{future::Either, Async, Future, Stream};
 use tokio_timer::Delay;
-use zmq;
 
 pub use async_zmq_types::{ControlledStream, EndingStream};
 
 use crate::{
-    async_types::{stream_type::StreamType, EventedFile},
+    async_types::stream_type::StreamType,
     error::Error,
     socket::Socket,
 };
@@ -72,8 +71,7 @@ pub struct MultipartStream<T>
 where
     T: From<Socket>,
 {
-    sock: zmq::Socket,
-    file: EventedFile,
+    sock: Socket,
     inner: StreamType,
     phantom: PhantomData<T>,
 }
@@ -82,10 +80,9 @@ impl<T> MultipartStream<T>
 where
     T: From<Socket>,
 {
-    pub fn new(sock: zmq::Socket, file: EventedFile) -> Self {
+    pub fn new(sock: Socket) -> Self {
         MultipartStream {
             sock,
-            file,
             inner: StreamType::new(),
             phantom: PhantomData,
         }
@@ -97,7 +94,7 @@ where
     T: From<Socket>,
 {
     fn into_socket(self) -> T {
-        T::from(Socket::from_sock_and_file(self.sock, self.file))
+        T::from(self.sock)
     }
 }
 
@@ -109,7 +106,7 @@ where
     type Error = Error;
 
     fn poll(&mut self) -> Result<Async<Option<Multipart>>, Self::Error> {
-        self.inner.poll(&self.sock, &self.file)
+        self.inner.poll(&self.sock)
     }
 }
 

@@ -25,11 +25,11 @@ use std::collections::VecDeque;
 use async_zmq_types::Multipart;
 use futures::{Async, AsyncSink, Poll};
 use log::{debug, error};
-use zmq;
 
 use crate::{
-    async_types::{future_types::request, EventedFile},
+    async_types::future_types::request,
     error::Error,
+    Socket,
 };
 
 pub(crate) struct SinkType {
@@ -56,10 +56,9 @@ impl SinkType {
     pub(crate) fn start_send(
         &mut self,
         multipart: Multipart,
-        sock: &zmq::Socket,
-        file: &EventedFile,
+        sock: &Socket,
     ) -> Result<AsyncSink<Multipart>, Error> {
-        self.poll_complete(sock, file)?;
+        self.poll_complete(sock)?;
 
         if self.pending.len() > 0 && self.pending.len() > self.buffer_size {
             debug!("Sink is not ready!");
@@ -72,11 +71,10 @@ impl SinkType {
 
     pub(crate) fn poll_complete(
         &mut self,
-        sock: &zmq::Socket,
-        file: &EventedFile,
+        sock: &Socket,
     ) -> Poll<(), Error> {
         while let Some(mut multipart) = self.pending.pop_front() {
-            match request::poll(sock, file, &mut multipart)? {
+            match request::poll(sock, &mut multipart)? {
                 Async::Ready(()) => continue,
                 Async::NotReady => {
                     self.pending.push_front(multipart);

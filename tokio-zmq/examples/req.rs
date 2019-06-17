@@ -32,8 +32,8 @@ use tokio_zmq::{prelude::*, Multipart, Req};
 fn build_multipart(i: usize) -> Multipart {
     let mut multipart = Multipart::new();
 
-    let msg1 = zmq::Message::from_slice(format!("Hewwo? {}", i).as_bytes());
-    let msg2 = zmq::Message::from_slice(format!("Mr Obama??? {}", i).as_bytes());
+    let msg1 = zmq::Message::from(&format!("Hewwo? {}", i));
+    let msg2 = zmq::Message::from(&format!("Mr Obama??? {}", i));
 
     multipart.push_back(msg1);
     multipart.push_back(msg2);

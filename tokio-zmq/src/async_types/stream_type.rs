@@ -20,11 +20,11 @@
 use async_zmq_types::Multipart;
 use futures::{try_ready, Async, Poll};
 use log::error;
-use zmq;
 
 use crate::{
-    async_types::{future_types::response, EventedFile},
+    async_types::future_types::response,
     error::Error,
+    Socket,
 };
 
 pub(crate) struct StreamType {
@@ -40,10 +40,9 @@ impl StreamType {
 
     pub(crate) fn poll(
         &mut self,
-        sock: &zmq::Socket,
-        file: &EventedFile,
+        sock: &Socket,
     ) -> Poll<Option<Multipart>, Error> {
-        let mpart = try_ready!(response::poll(&sock, &file, &mut self.multipart));
+        let mpart = try_ready!(response::poll(&sock, &mut self.multipart));
 
         Ok(Async::Ready(Some(mpart)))
     }

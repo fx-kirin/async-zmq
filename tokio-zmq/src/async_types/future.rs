@@ -24,12 +24,10 @@ use std::{fmt, marker::PhantomData};
 
 use async_zmq_types::Multipart;
 use futures::{Async, Future};
-use zmq;
 
 use crate::{
     async_types::{
         future_types::{request, response},
-        EventedFile,
     },
     error::Error,
     socket::Socket,
@@ -58,10 +56,8 @@ use crate::{
 /// #         .build();
 /// #
 /// #     rep.and_then(|rep| {
-/// #       let socket = rep.socket();
-/// #       let (sock, file) = socket.inner();
-/// #       let msg = zmq::Message::from_slice(format!("Hey").as_bytes());
-/// MultipartRequest::new(sock, file, msg.into()).and_then(|_: Rep| {
+/// #       let msg = zmq::Message::from(&format!("Hey"));
+/// MultipartRequest::new(rep.socket(), msg.into()).and_then(|_: Rep| {
 ///     // succesfull request
 /// #       Ok(())
 /// })
@@ -72,7 +68,7 @@ pub struct MultipartRequest<T>
 where
     T: From<Socket>,
 {
-    socks: Option<(zmq::Socket, EventedFile)>,
+    socks: Option<Socket>,
     multipart: Multipart,
     phantom: PhantomData<T>,
 }
@@ -81,9 +77,9 @@ impl<T> MultipartRequest<T>
 where
     T: From<Socket>,
 {
-    pub fn new(sock: zmq::Socket, file: EventedFile, multipart: Multipart) -> Self {
+    pub fn new(sock: Socket, multipart: Multipart) -> Self {
         MultipartRequest {
-            socks: Some((sock, file)),
+            socks: Some(sock),
             multipart: multipart,
             phantom: PhantomData,
         }
@@ -98,12 +94,12 @@ where
     type Error = Error;
 
     fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
-        let (sock, file) = self.socks.take().ok_or(Error::Reused)?;
+        let sock = self.socks.take().ok_or(Error::Reused)?;
 
-        match request::poll(&sock, &file, &mut self.multipart)? {
-            Async::Ready(()) => Ok(Async::Ready(Socket::from_sock_and_file(sock, file).into())),
+        match request::poll(&sock, &mut self.multipart)? {
+            Async::Ready(()) => Ok(Async::Ready(sock.into())),
             Async::NotReady => {
-                self.socks = Some((sock, file));
+                self.socks = Some(sock);
 
                 Ok(Async::NotReady)
             }
@@ -151,9 +147,7 @@ where
 /// #         .bind("tcp://*:5567")
 /// #         .build();
 /// #     rep.and_then(|rep| {
-/// #         let socket = rep.socket();
-/// #         let (sock, file) = socket.inner();
-/// MultipartResponse::new(sock, file).and_then(|(multipart, _): (_, Rep)| {
+/// MultipartResponse::new(rep.socket()).and_then(|(multipart, _): (_, Rep)| {
 ///     // handle multipart response
 ///     # Ok(multipart)
 /// })
@@ -164,7 +158,7 @@ pub struct MultipartResponse<T>
 where
     T: From<Socket>,
 {
-    socks: Option<(zmq::Socket, EventedFile)>,
+    socks: Option<Socket>,
     multipart: Multipart,
     phantom: PhantomData<T>,
 }
@@ -173,9 +167,9 @@ impl<T> MultipartResponse<T>
 where
     T: From<Socket>,
 {
-    pub fn new(sock: zmq::Socket, file: EventedFile) -> Self {
+    pub fn new(sock: Socket) -> Self {
         MultipartResponse {
-            socks: Some((sock, file)),
+            socks: Some(sock),
             multipart: Multipart::new(),
             phantom: PhantomData,
         }
@@ -190,15 +184,15 @@ where
     type Error = Error;
 
     fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
-        let (sock, file) = self.socks.take().ok_or(Error::Reused)?;
+        let sock = self.socks.take().ok_or(Error::Reused)?;
 
-        match response::poll(&sock, &file, &mut self.multipart)? {
+        match response::poll(&sock, &mut self.multipart)? {
             Async::Ready(multipart) => Ok(Async::Ready((
                 multipart,
-                Socket::from_sock_and_file(sock, file).into(),
+                sock.into(),
             ))),
             Async::NotReady => {
-                self.socks = Some((sock, file));
+                self.socks = Some(sock);
 
                 Ok(Async::NotReady)
             }

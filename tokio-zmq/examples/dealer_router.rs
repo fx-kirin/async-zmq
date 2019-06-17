@@ -52,7 +52,7 @@ fn client() {
     println!("Sending 'Hewwo?' for 0");
     let runner = req_fut
         .and_then(|req| {
-            req.send(zmq::Message::from_slice(b"Hewwo?").into())
+            req.send(zmq::Message::from("Hewwo?").into())
                 .and_then(|req| {
                     let (sink, stream) = req.sink_stream(25).split();
 
@@ -66,7 +66,7 @@ fn client() {
                             }
 
                             println!("Sending 'Hewwo?' for {}", request_nbr);
-                            zmq::Message::from_slice(b"Hewwo?").into()
+                            zmq::Message::from("Hewwo?").into()
                         })
                         .forward(sink)
                 })
@@ -85,7 +85,7 @@ fn client() {
                         }
                     }
 
-                    let msg = zmq::Message::from_slice(b"");
+                    let msg = zmq::Message::from("");
 
                     zpub.send(msg.into())
                 })
@@ -123,7 +123,7 @@ fn worker() {
                     }
                 }
 
-                let msg = zmq::Message::from_slice(b"Mr Obama???");
+                let msg = zmq::Message::from("Mr Obama???");
 
                 msg.into()
             })
