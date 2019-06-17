@@ -26,6 +26,7 @@ pub(crate) mod request {
     use async_zmq_types::Multipart;
     use futures::{try_ready, Async, Poll};
     use log::{debug, error};
+    use mio::Ready;
     use zmq::{self, Message, DONTWAIT, SNDMORE};
 
     use crate::{async_types::EventedFile, error::Error};
@@ -70,7 +71,7 @@ pub(crate) mod request {
             return Ok(Async::Ready(()));
         }
 
-        file.clear_write_ready()?;
+        file.clear_read_ready(Ready::readable())?;
         Ok(Async::NotReady)
     }
 
@@ -79,7 +80,8 @@ pub(crate) mod request {
         file: &EventedFile,
         multipart: &mut Multipart,
     ) -> Poll<(), Error> {
-        let _ = file.poll_write_ready()?;
+        let ready = Ready::readable();
+        let _ = file.poll_read_ready(ready)?;
         try_ready!(poll_write_ready(sock, file));
 
         match send(sock, multipart)? {
@@ -87,7 +89,7 @@ pub(crate) mod request {
                 Ok(Async::Ready(()))
             }
             Async::NotReady => {
-                file.clear_write_ready()?;
+                file.clear_read_ready(ready)?;
                 Ok(Async::NotReady)
             }
         }
@@ -159,7 +161,6 @@ pub(crate) mod response {
 
         match recv(sock, multipart)? {
             Async::Ready(multipart) => {
-                futures::task::current().notify();
                 Ok(Async::Ready(multipart))
             }
             Async::NotReady => {
