@@ -106,11 +106,11 @@ where
         &mut self,
         multipart: Self::SinkItem,
     ) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
-        self.inner.start_send(multipart, &self.sock)
+        self.inner.start_send(multipart, &self.sock, None)
     }
 
     fn poll_complete(&mut self) -> Result<Async<()>, Self::SinkError> {
-        self.inner.poll_complete(&self.sock)
+        self.inner.poll_complete(&self.sock, None)
     }
 }
 

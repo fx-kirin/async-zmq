@@ -24,9 +24,8 @@
 
 pub(crate) mod request {
     use async_zmq_types::Multipart;
-    use futures::{try_ready, Async, Poll};
+    use futures::{try_ready, Async, Poll, task::Task};
     use log::{debug, error};
-    use mio::Ready;
     use zmq::{self, Message, DONTWAIT, SNDMORE};
 
     use crate::{error::Error, Socket};
@@ -67,16 +66,16 @@ pub(crate) mod request {
     pub(crate) fn poll(
         sock: &Socket,
         multipart: &mut Multipart,
+        task: Option<&Task>,
     ) -> Poll<(), Error> {
-        let ready = Ready::readable();
-        try_ready!(sock.poll_write_ready());
+        try_ready!(sock.poll_write_ready(task));
 
         match send(sock, multipart)? {
             Async::Ready(()) => {
                 Ok(Async::Ready(()))
             }
             Async::NotReady => {
-                sock.clear_ready(ready)?;
+                sock.clear_write_ready()?;
                 Ok(Async::NotReady)
             }
         }
@@ -89,7 +88,7 @@ pub(crate) mod response {
     use std::mem;
 
     use async_zmq_types::Multipart;
-    use futures::{try_ready, Async, Poll};
+    use futures::{try_ready, Async, Poll, task::Task};
     use log::{debug, error};
     use mio::Ready;
     use zmq::{self, Message};
@@ -128,18 +127,18 @@ pub(crate) mod response {
     pub(crate) fn poll(
         sock: &Socket,
         multipart: &mut Multipart,
+        task: Option<&Task>,
     ) -> Poll<Multipart, Error> {
         let ready = Ready::readable();
 
-        try_ready!(sock.poll_read_ready(ready));
+        try_ready!(sock.poll_read_ready(ready, task));
 
         match recv(sock, multipart)? {
             Async::Ready(multipart) => {
-                futures::task::current().notify();
                 Ok(Async::Ready(multipart))
             }
             Async::NotReady => {
-                sock.clear_ready(ready)?;
+                sock.clear_read_ready(ready)?;
                 Ok(Async::NotReady)
             }
         }

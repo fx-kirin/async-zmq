@@ -18,7 +18,7 @@
  */
 
 use async_zmq_types::Multipart;
-use futures::{try_ready, Async, Poll};
+use futures::{try_ready, Async, Poll, task::Task};
 use log::error;
 
 use crate::{
@@ -41,8 +41,9 @@ impl StreamType {
     pub(crate) fn poll(
         &mut self,
         sock: &Socket,
+        task: Option<&Task>,
     ) -> Poll<Option<Multipart>, Error> {
-        let mpart = try_ready!(response::poll(&sock, &mut self.multipart));
+        let mpart = try_ready!(response::poll(&sock, &mut self.multipart, task));
 
         Ok(Async::Ready(Some(mpart)))
     }

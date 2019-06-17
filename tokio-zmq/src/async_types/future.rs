@@ -96,7 +96,7 @@ where
     fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
         let sock = self.socks.take().ok_or(Error::Reused)?;
 
-        match request::poll(&sock, &mut self.multipart)? {
+        match request::poll(&sock, &mut self.multipart, None)? {
             Async::Ready(()) => Ok(Async::Ready(sock.into())),
             Async::NotReady => {
                 self.socks = Some(sock);
@@ -186,7 +186,7 @@ where
     fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
         let sock = self.socks.take().ok_or(Error::Reused)?;
 
-        match response::poll(&sock, &mut self.multipart)? {
+        match response::poll(&sock, &mut self.multipart, None)? {
             Async::Ready(multipart) => Ok(Async::Ready((
                 multipart,
                 sock.into(),

@@ -24,7 +24,7 @@ pub mod types;
 
 
 use async_zmq_types::{InnerSocket, IntoInnerSocket, Multipart, SocketBuilder};
-use futures::Async;
+use futures::{Async, task::Task};
 use mio::Ready;
 use std::{fmt, sync::Arc};
 use tokio_reactor::PollEvented;
@@ -90,14 +90,35 @@ impl Socket {
         self.sock.recv(msg, zmq::DONTWAIT)
     }
 
-    pub(crate) fn poll_read_ready(&self, mask: Ready) -> Result<Async<Ready>, Error> {
-        self.poll_ready(mask, zmq::POLLIN)
+    pub(crate) fn poll_read_ready(&self, mask: Ready, task: Option<&Task>) -> Result<Async<Ready>, Error> {
+        let _ = self.file.poll_read_ready(mask)?;
+
+        let events = self.sock.get_events()?;
+
+        if let Some(task) = task {
+            if events & zmq::POLLOUT == zmq::POLLOUT {
+                task.notify();
+            }
+        }
+
+        if events & zmq::POLLIN == zmq::POLLIN {
+            return Ok(Async::Ready(mask));
+        }
+
+        self.file.clear_read_ready(mask)?;
+        Ok(Async::NotReady)
     }
 
-    pub(crate) fn poll_write_ready(&self) -> Result<Async<()>, Error> {
+    pub(crate) fn poll_write_ready(&self, task: Option<&Task>) -> Result<Async<()>, Error> {
         let _ = self.file.poll_write_ready()?;
 
         let events = self.sock.get_events()?;
+
+        if let Some(task) = task {
+            if events & zmq::POLLIN == zmq::POLLIN {
+                task.notify();
+            }
+        }
 
         if events & zmq::POLLOUT == zmq::POLLOUT {
             return Ok(Async::Ready(()));
@@ -107,22 +128,12 @@ impl Socket {
         Ok(Async::NotReady)
     }
 
-    #[inline]
-    fn poll_ready(&self, fd_mask: Ready, zmq_mask: zmq::PollEvents) -> Result<Async<Ready>, Error> {
-        let _ = self.file.poll_read_ready(fd_mask)?;
-
-        let events = self.sock.get_events()?;
-
-        if events & zmq_mask == zmq_mask {
-            return Ok(Async::Ready(fd_mask));
-        }
-
-        self.file.clear_read_ready(fd_mask)?;
-        Ok(Async::NotReady)
+    pub(crate) fn clear_read_ready(&self, mask: Ready) -> Result<(), std::io::Error> {
+        self.file.clear_read_ready(mask)
     }
 
-    pub(crate) fn clear_ready(&self, mask: Ready) -> Result<(), std::io::Error> {
-        self.file.clear_read_ready(mask)
+    pub(crate) fn clear_write_ready(&self) -> Result<(), std::io::Error> {
+        self.file.clear_write_ready()
     }
 }
 

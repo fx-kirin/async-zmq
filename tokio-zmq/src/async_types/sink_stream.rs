@@ -23,7 +23,7 @@
 use std::{fmt, marker::PhantomData};
 
 use async_zmq_types::{IntoSocket, Multipart};
-use futures::{AsyncSink, Poll, Sink, Stream};
+use futures::{AsyncSink, Poll, Sink, Stream, task::Task};
 
 use crate::{
     async_types::{sink_type::SinkType, stream_type::StreamType},
@@ -69,6 +69,8 @@ where
     sock: Socket,
     sink: SinkType,
     stream: StreamType,
+    sink_task: Option<Task>,
+    stream_task: Option<Task>,
     phantom: PhantomData<T>,
 }
 
@@ -81,6 +83,8 @@ where
             sock: sock,
             sink: SinkType::new(buffer_size),
             stream: StreamType::new(),
+            sink_task: None,
+            stream_task: None,
             phantom: PhantomData,
         }
     }
@@ -106,11 +110,14 @@ where
         &mut self,
         multipart: Self::SinkItem,
     ) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
-        self.sink.start_send(multipart, &self.sock)
+        if self.sink_task.is_none() {
+            self.sink_task = Some(futures::task::current());
+        }
+        self.sink.start_send(multipart, &self.sock, self.stream_task.as_ref())
     }
 
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.sink.poll_complete(&self.sock)
+        self.sink.poll_complete(&self.sock, self.stream_task.as_ref())
     }
 }
 
@@ -122,7 +129,10 @@ where
     type Error = Error;
 
     fn poll(&mut self) -> Poll<Option<Multipart>, Self::Error> {
-        self.stream.poll(&self.sock)
+        if self.stream_task.is_none() {
+            self.stream_task = Some(futures::task::current());
+        }
+        self.stream.poll(&self.sock, self.sink_task.as_ref())
     }
 }
 
