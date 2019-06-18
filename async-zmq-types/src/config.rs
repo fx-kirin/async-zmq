@@ -76,6 +76,12 @@ where
             ..self
         }
     }
+
+    /// Provide a function for configuring the underlying ZeroMQ socket
+    ///
+    /// Note: Only the last call to customize will apply to a given socket.
+    ///
+    /// Documentation can be found [here](https://docs.rs/zmq/0.9.1/zmq/struct.Socket.html)
     pub fn customize<F>(self, f: F) -> Self
     where
         F: Fn(&zmq::Socket) + 'static,
@@ -151,6 +157,21 @@ where
     pub fn connect(mut self, addr: &'a str) -> Self {
         self.connect.push(addr);
         self
+    }
+
+    /// Provide a function for configuring the underlying ZeroMQ socket
+    ///
+    /// Note: Only the last call to customize will apply to a given socket.
+    ///
+    /// Documentation can be found [here](https://docs.rs/zmq/0.9.1/zmq/struct.Socket.html)
+    pub fn customize<F>(self, f: F) -> Self
+    where
+        F: Fn(&zmq::Socket) + 'static,
+    {
+        SockConfig {
+            customize: Box::new(f),
+            ..self
+        }
     }
 
     pub fn do_build(self) -> Result<zmq::Socket, zmq::Error> {
@@ -239,6 +260,21 @@ impl<'a> SubConfig<'a> {
         }
     }
 
+    /// Provide a function for configuring the underlying ZeroMQ socket
+    ///
+    /// Note: Only the last call to customize will apply to a given socket.
+    ///
+    /// Documentation can be found [here](https://docs.rs/zmq/0.9.1/zmq/struct.Socket.html)
+    pub fn customize<F>(self, f: F) -> Self
+    where
+        F: Fn(&zmq::Socket) + 'static,
+    {
+        SubConfig {
+            customize: Box::new(f),
+            ..self
+        }
+    }
+
     /// Finalize the `SubConfig` into a `Sub` if the creation is successful, or into an Error
     /// if something went wrong.
     pub fn do_build(self) -> Result<zmq::Socket, zmq::Error> {
@@ -305,5 +341,20 @@ impl<'a> PairConfig<'a> {
         }
 
         Ok(sock)
+    }
+
+    /// Provide a function for configuring the underlying ZeroMQ socket
+    ///
+    /// Note: Only the last call to customize will apply to a given socket.
+    ///
+    /// Documentation can be found [here](https://docs.rs/zmq/0.9.1/zmq/struct.Socket.html)
+    pub fn customize<F>(self, f: F) -> Self
+    where
+        F: Fn(&zmq::Socket) + 'static,
+    {
+        PairConfig {
+            customize: Box::new(f),
+            ..self
+        }
     }
 }
