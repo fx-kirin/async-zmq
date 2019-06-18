@@ -1,7 +1,7 @@
 /*
  * This file is part of Tokio ZMQ.
  *
- * Copyright © 2018 Riley Trautman
+ * Copyright © 2019 Riley Trautman
  *
  * Tokio ZMQ is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,14 +18,10 @@
  */
 
 use async_zmq_types::Multipart;
-use futures::{try_ready, Async, Poll, task::Task};
+use futures::{task::Task, try_ready, Async, Poll};
 use log::error;
 
-use crate::{
-    async_types::future_types::response,
-    error::Error,
-    Socket,
-};
+use crate::{async_types::future_types::response, error::Error, Socket};
 
 pub(crate) struct StreamType {
     multipart: Multipart,

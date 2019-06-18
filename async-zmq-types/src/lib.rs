@@ -1,7 +1,7 @@
 /*
  * This file is part of Async ZMQ Types.
  *
- * Copyright © 2018 Riley Trautman
+ * Copyright © 2019 Riley Trautman
  *
  * Async ZMQ Types is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

@@ -1,7 +1,7 @@
 /*
  * This file is part of Tokio ZMQ.
  *
- * Copyright © 2018 Riley Trautman
+ * Copyright © 2019 Riley Trautman
  *
  * Tokio ZMQ is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,14 +23,10 @@
 use std::collections::VecDeque;
 
 use async_zmq_types::Multipart;
-use futures::{Async, AsyncSink, Poll, task::Task};
+use futures::{task::Task, Async, AsyncSink, Poll};
 use log::{debug, error};
 
-use crate::{
-    async_types::future_types::request,
-    error::Error,
-    Socket,
-};
+use crate::{async_types::future_types::request, error::Error, Socket};
 
 pub(crate) struct SinkType {
     buffer_size: usize,
@@ -70,11 +66,7 @@ impl SinkType {
         Ok(AsyncSink::Ready)
     }
 
-    pub(crate) fn poll_complete(
-        &mut self,
-        sock: &Socket,
-        task: Option<&Task>,
-    ) -> Poll<(), Error> {
+    pub(crate) fn poll_complete(&mut self, sock: &Socket, task: Option<&Task>) -> Poll<(), Error> {
         while let Some(mut multipart) = self.pending.pop_front() {
             match request::poll(sock, &mut multipart, task)? {
                 Async::Ready(()) => continue,

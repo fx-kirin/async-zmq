@@ -1,7 +1,7 @@
 /*
  * This file is part of Tokio ZMQ.
  *
- * Copyright © 2018 Riley Trautman
+ * Copyright © 2019 Riley Trautman
  *
  * Tokio ZMQ is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,11 +25,7 @@ use std::{fmt, marker::PhantomData};
 use async_zmq_types::{IntoSocket, Multipart};
 use futures::{Async, AsyncSink, Sink};
 
-use crate::{
-    async_types::sink_type::SinkType,
-    error::Error,
-    socket::Socket,
-};
+use crate::{async_types::sink_type::SinkType, error::Error, socket::Socket};
 
 /// The `MultipartSink` Sink handles sending streams of data to ZeroMQ Sockets.
 ///

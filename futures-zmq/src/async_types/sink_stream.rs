@@ -1,7 +1,7 @@
 /*
  * This file is part of Futures ZMQ.
  *
- * Copyright © 2018 Riley Trautman
+ * Copyright © 2019 Riley Trautman
  *
  * Futures ZMQ is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

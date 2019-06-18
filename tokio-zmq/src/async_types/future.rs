@@ -1,7 +1,7 @@
 /*
  * This file is part of Tokio ZMQ.
  *
- * Copyright © 2018 Riley Trautman
+ * Copyright © 2019 Riley Trautman
  *
  * Tokio ZMQ is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,9 +26,7 @@ use async_zmq_types::Multipart;
 use futures::{Async, Future};
 
 use crate::{
-    async_types::{
-        future_types::{request, response},
-    },
+    async_types::future_types::{request, response},
     error::Error,
     socket::Socket,
 };
@@ -187,10 +185,7 @@ where
         let sock = self.socks.take().ok_or(Error::Reused)?;
 
         match response::poll(&sock, &mut self.multipart, None)? {
-            Async::Ready(multipart) => Ok(Async::Ready((
-                multipart,
-                sock.into(),
-            ))),
+            Async::Ready(multipart) => Ok(Async::Ready((multipart, sock.into()))),
             Async::NotReady => {
                 self.socks = Some(sock);
 

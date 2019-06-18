@@ -1,7 +1,7 @@
 /*
  * This file is part of Tokio ZMQ.
  *
- * Copyright © 2018 Riley Trautman
+ * Copyright © 2019 Riley Trautman
  *
  * Tokio ZMQ is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,11 +29,7 @@ use tokio_timer::Delay;
 
 pub use async_zmq_types::{ControlledStream, EndingStream};
 
-use crate::{
-    async_types::stream_type::StreamType,
-    error::Error,
-    socket::Socket,
-};
+use crate::{async_types::stream_type::StreamType, error::Error, socket::Socket};
 
 /// The `MultipartStream` Sink handles receiving streams of data from ZeroMQ Sockets.
 ///

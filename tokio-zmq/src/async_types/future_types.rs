@@ -1,7 +1,7 @@
 /*
  * This file is part of Tokio ZMQ.
  *
- * Copyright © 2018 Riley Trautman
+ * Copyright © 2019 Riley Trautman
  *
  * Tokio ZMQ is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 
 pub(crate) mod request {
     use async_zmq_types::Multipart;
-    use futures::{try_ready, Async, Poll, task::Task};
+    use futures::{task::Task, try_ready, Async, Poll};
     use log::{debug, error};
     use zmq::{self, Message, DONTWAIT, SNDMORE};
 
@@ -71,9 +71,7 @@ pub(crate) mod request {
         try_ready!(sock.poll_write_ready(task));
 
         match send(sock, multipart)? {
-            Async::Ready(()) => {
-                Ok(Async::Ready(()))
-            }
+            Async::Ready(()) => Ok(Async::Ready(())),
             Async::NotReady => {
                 sock.clear_write_ready()?;
                 Ok(Async::NotReady)
@@ -88,7 +86,7 @@ pub(crate) mod response {
     use std::mem;
 
     use async_zmq_types::Multipart;
-    use futures::{try_ready, Async, Poll, task::Task};
+    use futures::{task::Task, try_ready, Async, Poll};
     use log::{debug, error};
     use mio::Ready;
     use zmq::{self, Message};

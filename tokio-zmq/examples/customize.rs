@@ -17,13 +17,6 @@
  * along with Tokio ZMQ.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern crate env_logger;
-extern crate futures;
-extern crate log;
-extern crate tokio;
-extern crate tokio_zmq;
-extern crate zmq;
-
 use std::{sync::Arc, thread, time::Duration};
 
 use futures::{stream::iter_ok, Future, Sink, Stream};
@@ -55,9 +48,18 @@ impl EndHandler for Stop {
 fn publisher_thread() {
     let ctx = Arc::new(zmq::Context::new());
 
-    let publisher_fut = Pub::builder(Arc::clone(&ctx)).bind("tcp://*:5561").build();
+    let publisher_fut = Pub::builder(Arc::clone(&ctx))
+        .customize(|sock| {
+            let _ = sock.set_maxmsgsize(256);
+        })
+        .bind("tcp://*:5561")
+        .build();
 
-    let syncservice_fut = Rep::builder(ctx).bind("tcp://*:5562").build();
+    let syncservice_fut = Rep::builder(ctx)
+        .customize(|sock| {
+            let _ = sock.set_maxmsgsize(256);
+        })
+        .bind("tcp://*:5562").build();
 
     println!("Waiting for subscribers");
 
@@ -94,11 +96,18 @@ fn subscriber_thread() {
     let ctx = Arc::new(zmq::Context::new());
 
     let subscriber_fut = Sub::builder(Arc::clone(&ctx))
+        .customize(|sock| {
+            let _ = sock.set_maxmsgsize(256);
+        })
         .connect("tcp://localhost:5561")
         .filter(b"")
         .build();
 
-    let syncclient_fut = Req::builder(ctx).connect("tcp://localhost:5562").build();
+    let syncclient_fut = Req::builder(ctx)
+        .customize(|sock| {
+            let _ = sock.set_maxmsgsize(256);
+        })
+        .connect("tcp://localhost:5562").build();
 
     let msg = zmq::Message::from("");
 

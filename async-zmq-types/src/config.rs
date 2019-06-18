@@ -1,7 +1,7 @@
 /*
  * This file is part of Async ZMQ Types.
  *
- * Copyright © 2018 Riley Trautman
+ * Copyright © 2019 Riley Trautman
  *
  * Async ZMQ Types is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,6 +48,7 @@ where
 {
     ctx: Arc<zmq::Context>,
     identity: Option<&'a [u8]>,
+    custom: Box<dyn Fn(&zmq::Socket)>,
     _type: PhantomData<T>,
 }
 
@@ -63,6 +64,7 @@ where
         SocketBuilder {
             ctx,
             identity: None,
+            custom: Box::new(|_| {}),
             _type: PhantomData,
         }
     }
@@ -70,9 +72,23 @@ where
     /// Give the socket a custom identity
     pub fn identity(self, identity: &'a [u8]) -> Self {
         SocketBuilder {
-            ctx: self.ctx,
             identity: Some(identity),
-            _type: self._type,
+            ..self
+        }
+    }
+
+    /// Provide a function for configuring the underlying ZeroMQ socket
+    ///
+    /// Note: Only the last call to customize will apply to a given socket.
+    ///
+    /// Documentation can be found [here](https://docs.rs/zmq/0.9.1/zmq/struct.Socket.html)
+    pub fn customize<F>(self, f: F) -> Self
+    where
+        F: Fn(&zmq::Socket) + 'static,
+    {
+        SocketBuilder {
+            custom: Box::new(f),
+            ..self
         }
     }
 
@@ -86,6 +102,7 @@ where
             bind: vec![addr],
             connect: Vec::new(),
             identity: self.identity,
+            customize: self.custom,
             _type: self._type,
         }
     }
@@ -100,6 +117,7 @@ where
             bind: Vec::new(),
             connect: vec![addr],
             identity: self.identity,
+            customize: self.custom,
             _type: self._type,
         }
     }
@@ -117,6 +135,7 @@ where
     pub bind: Vec<&'a str>,
     pub connect: Vec<&'a str>,
     pub identity: Option<&'a [u8]>,
+    pub customize: Box<dyn Fn(&zmq::Socket)>,
     _type: PhantomData<T>,
 }
 
@@ -140,12 +159,28 @@ where
         self
     }
 
+    /// Provide a function for configuring the underlying ZeroMQ socket
+    ///
+    /// Note: Only the last call to customize will apply to a given socket.
+    ///
+    /// Documentation can be found [here](https://docs.rs/zmq/0.9.1/zmq/struct.Socket.html)
+    pub fn customize<F>(self, f: F) -> Self
+    where
+        F: Fn(&zmq::Socket) + 'static,
+    {
+        SockConfig {
+            customize: Box::new(f),
+            ..self
+        }
+    }
+
     pub fn do_build(self) -> Result<zmq::Socket, zmq::Error> {
         let SockConfig {
             ctx,
             bind,
             connect,
             identity,
+            customize,
             _type,
         } = self;
 
@@ -153,6 +188,7 @@ where
         if let Some(identity) = identity {
             sock.set_identity(identity)?;
         }
+        customize(&sock);
         let sock = bind_all(sock, &bind)?;
         let sock = connect_all(sock, &connect)?;
 
@@ -172,6 +208,7 @@ where
             ctx: self.ctx,
             addr,
             bind,
+            customize: self.customize,
             identity: self.identity,
         }
     }
@@ -188,8 +225,9 @@ where
             ctx: self.ctx,
             bind: self.bind,
             connect: self.connect,
-            identity: self.identity,
+            customize: self.customize,
             filter: vec![pattern],
+            identity: self.identity,
         }
     }
 }
@@ -201,6 +239,7 @@ pub struct SubConfig<'a> {
     pub ctx: Arc<zmq::Context>,
     pub bind: Vec<&'a str>,
     pub connect: Vec<&'a str>,
+    pub customize: Box<dyn Fn(&zmq::Socket)>,
     pub filter: Vec<&'a [u8]>,
     pub identity: Option<&'a [u8]>,
 }
@@ -215,8 +254,24 @@ impl<'a> SubConfig<'a> {
             ctx: self.ctx,
             bind: self.bind,
             connect: self.connect,
-            identity: self.identity,
+            customize: self.customize,
             filter: self.filter,
+            identity: self.identity,
+        }
+    }
+
+    /// Provide a function for configuring the underlying ZeroMQ socket
+    ///
+    /// Note: Only the last call to customize will apply to a given socket.
+    ///
+    /// Documentation can be found [here](https://docs.rs/zmq/0.9.1/zmq/struct.Socket.html)
+    pub fn customize<F>(self, f: F) -> Self
+    where
+        F: Fn(&zmq::Socket) + 'static,
+    {
+        SubConfig {
+            customize: Box::new(f),
+            ..self
         }
     }
 
@@ -227,6 +282,7 @@ impl<'a> SubConfig<'a> {
             ctx,
             bind,
             connect,
+            customize,
             filter,
             identity,
         } = self;
@@ -235,6 +291,7 @@ impl<'a> SubConfig<'a> {
         if let Some(identity) = identity {
             sock.set_identity(identity)?;
         }
+        customize(&sock);
         let sock = bind_all(sock, &bind)?;
         let sock = connect_all(sock, &connect)?;
         for pattern in filter {
@@ -252,6 +309,7 @@ pub struct PairConfig<'a> {
     ctx: Arc<zmq::Context>,
     addr: &'a str,
     bind: bool,
+    customize: Box<dyn Fn(&zmq::Socket)>,
     identity: Option<&'a [u8]>,
 }
 
@@ -267,6 +325,7 @@ impl<'a> PairConfig<'a> {
             ctx,
             addr,
             bind,
+            customize,
             identity,
         } = self;
 
@@ -274,6 +333,7 @@ impl<'a> PairConfig<'a> {
         if let Some(identity) = identity {
             sock.set_identity(identity)?;
         }
+        customize(&sock);
         if bind {
             sock.bind(addr)?;
         } else {
@@ -281,5 +341,20 @@ impl<'a> PairConfig<'a> {
         }
 
         Ok(sock)
+    }
+
+    /// Provide a function for configuring the underlying ZeroMQ socket
+    ///
+    /// Note: Only the last call to customize will apply to a given socket.
+    ///
+    /// Documentation can be found [here](https://docs.rs/zmq/0.9.1/zmq/struct.Socket.html)
+    pub fn customize<F>(self, f: F) -> Self
+    where
+        F: Fn(&zmq::Socket) + 'static,
+    {
+        PairConfig {
+            customize: Box::new(f),
+            ..self
+        }
     }
 }

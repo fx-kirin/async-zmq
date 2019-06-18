@@ -1,7 +1,7 @@
 /*
  * This file is part of Tokio ZMQ.
  *
- * Copyright © 2018 Riley Trautman
+ * Copyright © 2019 Riley Trautman
  *
  * Tokio ZMQ is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
 use std::{fmt, marker::PhantomData};
 
 use async_zmq_types::{IntoSocket, Multipart};
-use futures::{AsyncSink, Poll, Sink, Stream, task::Task};
+use futures::{task::Task, AsyncSink, Poll, Sink, Stream};
 
 use crate::{
     async_types::{sink_type::SinkType, stream_type::StreamType},
@@ -113,11 +113,13 @@ where
         if self.sink_task.is_none() {
             self.sink_task = Some(futures::task::current());
         }
-        self.sink.start_send(multipart, &self.sock, self.stream_task.as_ref())
+        self.sink
+            .start_send(multipart, &self.sock, self.stream_task.as_ref())
     }
 
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.sink.poll_complete(&self.sock, self.stream_task.as_ref())
+        self.sink
+            .poll_complete(&self.sock, self.stream_task.as_ref())
     }
 }
 
