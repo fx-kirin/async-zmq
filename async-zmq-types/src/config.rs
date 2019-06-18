@@ -24,7 +24,6 @@ use std::{marker::PhantomData, sync::Arc};
 use zmq;
 
 use crate::{IntoInnerSocket, Pair, Sub, UnPair};
-use zmq::Socket;
 
 fn bind_all(sock: zmq::Socket, binds: &[&str]) -> zmq::Result<zmq::Socket> {
     for bind in binds {
@@ -49,7 +48,7 @@ where
 {
     ctx: Arc<zmq::Context>,
     identity: Option<&'a [u8]>,
-    custom: Box<Fn(&Socket)>,
+    custom: Box<dyn Fn(&zmq::Socket)>,
     _type: PhantomData<T>,
 }
 
@@ -130,7 +129,7 @@ where
     pub bind: Vec<&'a str>,
     pub connect: Vec<&'a str>,
     pub identity: Option<&'a [u8]>,
-    customize: Box<Fn(&Socket)>,
+    pub customize: Box<dyn Fn(&zmq::Socket)>,
     _type: PhantomData<T>,
 }
 
@@ -188,6 +187,7 @@ where
             ctx: self.ctx,
             addr,
             bind,
+            customize: self.customize,
             identity: self.identity,
         }
     }
@@ -204,8 +204,9 @@ where
             ctx: self.ctx,
             bind: self.bind,
             connect: self.connect,
-            identity: self.identity,
+            customize: self.customize,
             filter: vec![pattern],
+            identity: self.identity,
         }
     }
 }
@@ -217,6 +218,7 @@ pub struct SubConfig<'a> {
     pub ctx: Arc<zmq::Context>,
     pub bind: Vec<&'a str>,
     pub connect: Vec<&'a str>,
+    pub customize: Box<dyn Fn(&zmq::Socket)>,
     pub filter: Vec<&'a [u8]>,
     pub identity: Option<&'a [u8]>,
 }
@@ -231,8 +233,9 @@ impl<'a> SubConfig<'a> {
             ctx: self.ctx,
             bind: self.bind,
             connect: self.connect,
-            identity: self.identity,
+            customize: self.customize,
             filter: self.filter,
+            identity: self.identity,
         }
     }
 
@@ -243,6 +246,7 @@ impl<'a> SubConfig<'a> {
             ctx,
             bind,
             connect,
+            customize,
             filter,
             identity,
         } = self;
@@ -251,6 +255,7 @@ impl<'a> SubConfig<'a> {
         if let Some(identity) = identity {
             sock.set_identity(identity)?;
         }
+        customize(&sock);
         let sock = bind_all(sock, &bind)?;
         let sock = connect_all(sock, &connect)?;
         for pattern in filter {
@@ -268,6 +273,7 @@ pub struct PairConfig<'a> {
     ctx: Arc<zmq::Context>,
     addr: &'a str,
     bind: bool,
+    customize: Box<dyn Fn(&zmq::Socket)>,
     identity: Option<&'a [u8]>,
 }
 
@@ -283,6 +289,7 @@ impl<'a> PairConfig<'a> {
             ctx,
             addr,
             bind,
+            customize,
             identity,
         } = self;
 
@@ -290,6 +297,7 @@ impl<'a> PairConfig<'a> {
         if let Some(identity) = identity {
             sock.set_identity(identity)?;
         }
+        customize(&sock);
         if bind {
             sock.bind(addr)?;
         } else {
