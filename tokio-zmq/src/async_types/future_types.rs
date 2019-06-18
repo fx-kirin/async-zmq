@@ -135,6 +135,7 @@ pub(crate) mod response {
 
         match recv(sock, multipart)? {
             Async::Ready(multipart) => {
+                futures::task::current().notify();
                 Ok(Async::Ready(multipart))
             }
             Async::NotReady => {
