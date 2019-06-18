@@ -18,14 +18,10 @@
  */
 
 use async_zmq_types::Multipart;
-use futures::{try_ready, Async, Poll, task::Task};
+use futures::{task::Task, try_ready, Async, Poll};
 use log::error;
 
-use crate::{
-    async_types::future_types::response,
-    error::Error,
-    Socket,
-};
+use crate::{async_types::future_types::response, error::Error, Socket};
 
 pub(crate) struct StreamType {
     multipart: Multipart,

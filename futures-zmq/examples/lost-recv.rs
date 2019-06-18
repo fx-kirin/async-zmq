@@ -1,11 +1,8 @@
 use std::sync::Arc;
 
-use futures::{
-    future::Future,
-    stream::{Stream},
-};
-use tokio::runtime::current_thread;
+use futures::{future::Future, stream::Stream};
 use futures_zmq::{prelude::*, Dealer};
+use tokio::runtime::current_thread;
 
 fn main() {
     std::env::set_var("RUST_LOG", "futures_zmq=info");
@@ -19,11 +16,11 @@ fn main() {
     let (_, stream) = socket.sink_stream(8192).split();
 
     let process = stream.fold(1, |count, _| {
-            if count % 100 == 0 {
-                println!("{}", count);
-            }
-            Ok(count + 1) as Result<_, zmq::Error>
-        });
+        if count % 100 == 0 {
+            println!("{}", count);
+        }
+        Ok(count + 1) as Result<_, zmq::Error>
+    });
 
     current_thread::Runtime::new()
         .unwrap()

@@ -22,9 +22,8 @@
 pub mod config;
 pub mod types;
 
-
 use async_zmq_types::{InnerSocket, IntoInnerSocket, Multipart, SocketBuilder};
-use futures::{Async, task::Task};
+use futures::{task::Task, Async};
 use mio::Ready;
 use std::{fmt, sync::Arc};
 use tokio_reactor::PollEvented;
@@ -90,7 +89,11 @@ impl Socket {
         self.sock.recv(msg, zmq::DONTWAIT)
     }
 
-    pub(crate) fn poll_read_ready(&self, mask: Ready, task: Option<&Task>) -> Result<Async<Ready>, Error> {
+    pub(crate) fn poll_read_ready(
+        &self,
+        mask: Ready,
+        task: Option<&Task>,
+    ) -> Result<Async<Ready>, Error> {
         let _ = self.file.poll_read_ready(mask)?;
 
         let events = self.sock.get_events()?;

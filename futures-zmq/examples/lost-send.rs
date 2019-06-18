@@ -5,8 +5,8 @@ use futures::{
     future::Future,
     stream::{repeat, Stream},
 };
-use tokio::runtime::current_thread;
 use futures_zmq::{prelude::*, Dealer};
+use tokio::runtime::current_thread;
 
 fn main() {
     std::env::set_var("RUST_LOG", "futures_zmq=info");

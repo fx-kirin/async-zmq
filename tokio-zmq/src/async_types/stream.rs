@@ -29,11 +29,7 @@ use tokio_timer::Delay;
 
 pub use async_zmq_types::{ControlledStream, EndingStream};
 
-use crate::{
-    async_types::stream_type::StreamType,
-    error::Error,
-    socket::Socket,
-};
+use crate::{async_types::stream_type::StreamType, error::Error, socket::Socket};
 
 /// The `MultipartStream` Sink handles receiving streams of data from ZeroMQ Sockets.
 ///

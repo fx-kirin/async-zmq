@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use failure::{Error, Fail};
 use futures::{future::Future, stream::Stream, sync::mpsc::channel};
-use tokio::runtime::current_thread;
 use futures_zmq::{prelude::*, Dealer};
+use tokio::runtime::current_thread;
 
 const COUNT: usize = 500;
 

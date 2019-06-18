@@ -49,7 +49,7 @@ where
 {
     ctx: Arc<zmq::Context>,
     identity: Option<&'a [u8]>,
-    custom : Box<Fn(&Socket)>,
+    custom: Box<Fn(&Socket)>,
     _type: PhantomData<T>,
 }
 
@@ -65,7 +65,7 @@ where
         SocketBuilder {
             ctx,
             identity: None,
-            custom : Box::new(|_| {}),
+            custom: Box::new(|_| {}),
             _type: PhantomData,
         }
     }
@@ -74,17 +74,17 @@ where
     pub fn identity(self, identity: &'a [u8]) -> Self {
         SocketBuilder {
             identity: Some(identity),
-            .. self
+            ..self
         }
     }
     pub fn customize<F>(self, f: F) -> Self
-        where F : Fn(&zmq::Socket) + 'static
+    where
+        F: Fn(&zmq::Socket) + 'static,
     {
         SocketBuilder {
-            custom : Box::new(f),
-            .. self
+            custom: Box::new(f),
+            ..self
         }
-
     }
 
     /// Bind the socket to an address
@@ -97,7 +97,7 @@ where
             bind: vec![addr],
             connect: Vec::new(),
             identity: self.identity,
-            customize : self.custom,
+            customize: self.custom,
             _type: self._type,
         }
     }
@@ -112,7 +112,7 @@ where
             bind: Vec::new(),
             connect: vec![addr],
             identity: self.identity,
-            customize : self.custom,
+            customize: self.custom,
             _type: self._type,
         }
     }
@@ -130,7 +130,7 @@ where
     pub bind: Vec<&'a str>,
     pub connect: Vec<&'a str>,
     pub identity: Option<&'a [u8]>,
-    customize :  Box<Fn(&Socket)>,
+    customize: Box<Fn(&Socket)>,
     _type: PhantomData<T>,
 }
 
