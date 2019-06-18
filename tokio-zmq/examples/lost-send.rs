@@ -17,7 +17,7 @@ fn main() {
         .build()
         .wait()
         .unwrap();
-    let (sink, stream) = socket.sink_stream(8192).split();
+    let (sink, _) = socket.sink_stream(8192).split();
 
     let process = repeat(0)
         .map(|_| zmq::Message::from("hi").into())
