@@ -1,5 +1,5 @@
 # Tokio ZMQ
-_This readme is for the 0.8 branch, for the 0.3 readme, look [here](https://git.asonix.dog/asonix/tokio-zmq/src/branch/v0.3.X)_
+_This readme is for the 0.10 branch, for the 0.3 readme, look [here](https://git.asonix.dog/asonix/tokio-zmq/src/branch/v0.3.X)_
 
 [documentation](https://docs.rs/tokio-zmq/)
 [crates.io](https://crates.io/crates/tokio-zmq)
