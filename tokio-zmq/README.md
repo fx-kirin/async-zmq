@@ -26,8 +26,8 @@ See the [examples folder](https://git.asonix.dog/asonix/async-zmq/src/branch/dev
 ```toml
 futures = "0.1.25"
 tokio = "0.1"
-tokio-zmq = "0.9"
-zmq = "0.9"
+tokio-zmq = "0.10"
+zmq = "0.9.1"
 ```
 
 In your application:

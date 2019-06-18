@@ -26,9 +26,9 @@ NOTE: These examples use Tokio, but this crate does not require tokio's runtime.
 
 ```toml
 futures = "0.1.25"
-futures-zmq = "0.4"
+futures-zmq = "0.5"
 tokio = "0.1"
-zmq = "0.9"
+zmq = "0.9.1"
 ```
 
 In your application:
