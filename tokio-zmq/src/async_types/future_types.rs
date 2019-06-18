@@ -71,7 +71,10 @@ pub(crate) mod request {
         try_ready!(sock.poll_write_ready(task));
 
         match send(sock, multipart)? {
-            Async::Ready(()) => Ok(Async::Ready(())),
+            Async::Ready(()) => {
+                task.map(|t| t.notify());
+                Ok(Async::Ready(()))
+            },
             Async::NotReady => {
                 sock.clear_write_ready()?;
                 Ok(Async::NotReady)
@@ -133,7 +136,7 @@ pub(crate) mod response {
 
         match recv(sock, multipart)? {
             Async::Ready(multipart) => {
-                futures::task::current().notify();
+                task.map(|t| t.notify());
                 Ok(Async::Ready(multipart))
             }
             Async::NotReady => {
