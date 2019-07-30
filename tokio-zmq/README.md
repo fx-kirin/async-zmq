@@ -1,8 +1,9 @@
 # Tokio ZMQ
 _This readme is for the 0.10 branch, for the 0.3 readme, look [here](https://git.asonix.dog/asonix/tokio-zmq/src/branch/v0.3.X)_
 
-[documentation](https://docs.rs/tokio-zmq/)
-[crates.io](https://crates.io/crates/tokio-zmq)
+- [Read the documentation on docs.rs](https://docs.rs/tokio-zmq/)
+- [Find the crate on crates.io](https://crates.io/crates/tokio-zmq)
+- [Join the discussion on Matrix](https://matrix.to/#/!jrvqoVkOvHjRbKJlgJ:asonix.dog?via=asonix.dog)
 
 This crate contains wrappers around ZeroMQ Concepts with futures on Tokio's runtime.
 

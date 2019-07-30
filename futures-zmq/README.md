@@ -1,7 +1,8 @@
 # Futures ZMQ
 
-[documentation](https://docs.rs/futures-zmq/)
-[crates.io](https://crates.io/crates/futures-zmq)
+- [Read the documentation on docs.rs](https://docs.rs/futures-zmq/)
+- [Find the crate on crates.io](https://crates.io/crates/futures-zmq)
+- [Join the discussion on Matrix](https://matrix.to/#/!jrvqoVkOvHjRbKJlgJ:asonix.dog?via=asonix.dog)
 
 This crate contains wrappers around ZeroMQ Concepts with Futures. It shares an external API with [tokio-zmq](https://docs.rs/tokio-zmq), but unlike tokio-zmq, futures-zmq is OS and Executor agnostic. This comes at the cost of performance, as futures-zmq relies on spinning up a separate thread for managing the ZeroMQ sockets, while tokio-zmq can avoid this issue by letting mio manage the sockets.
 
