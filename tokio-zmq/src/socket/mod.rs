@@ -100,7 +100,7 @@ impl Socket {
 
         if let Some(task) = task {
             if events & zmq::POLLOUT == zmq::POLLOUT {
-                task.notify();
+                //task.notify();
             }
         }
 
